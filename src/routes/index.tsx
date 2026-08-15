@@ -19,6 +19,9 @@ import { Floaty, RevealItem, ScrollReveal, ScrollRevealGroup } from "@/component
 import { StudlyLogo } from "@/components/brand/StudlyLogo";
 import { Markdown } from "@/components/chat/Markdown";
 import { Button } from "@/components/ui/button";
+import drMoAvatar from "@/assets/hero/dr-mo.jpg";
+import irisAvatar from "@/assets/hero/iris.jpg";
+import lexAvatar from "@/assets/hero/lex.jpg";
 import { LEAGUE_TIERS, TROPHIES } from "@/lib/trophies";
 
 const ROTATING_SUBTITLES = [
@@ -254,13 +257,13 @@ const STEPS = [
     mock: (
       <div className="glass-card flex items-center gap-3 p-4">
         {[
-          { name: "Dr. Mo", c: "M" },
-          { name: "Lex", c: "L" },
-          { name: "Iris", c: "I" },
+          { name: "Dr. Mo", image: drMoAvatar },
+          { name: "Lex", image: lexAvatar },
+          { name: "Iris", image: irisAvatar },
         ].map((p) => (
           <div key={p.name} className="flex flex-col items-center gap-1">
-            <div className="grid size-11 place-items-center rounded-full bg-primary/15 font-semibold text-primary ring-1 ring-primary/30">
-              {p.c}
+            <div className="size-11 overflow-hidden rounded-full bg-primary/15 ring-1 ring-primary/30">
+              <img src={p.image} alt={p.name} className="size-full object-cover" />
             </div>
             <span className="text-xs text-muted-foreground">{p.name}</span>
           </div>
