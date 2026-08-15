@@ -45,7 +45,7 @@ function SignupPage() {
     event.preventDefault();
     if (busy) return;
 
-    const cleanUsername = username.trim();
+    const cleanUsername = username.trim().toLowerCase();
     if (!USERNAME_RE.test(cleanUsername)) {
       toast.error("Usernames use 3–24 letters, numbers, dots or underscores.");
       return;

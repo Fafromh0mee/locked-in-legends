@@ -370,6 +370,7 @@ export type Database = {
           episodes_done: number
           error: string | null
           id: string
+          input_context: Json
           owner_id: string
           progress: number
           series_id: string | null
@@ -383,6 +384,7 @@ export type Database = {
           episodes_done?: number
           error?: string | null
           id?: string
+          input_context?: Json
           owner_id: string
           progress?: number
           series_id?: string | null
@@ -396,6 +398,7 @@ export type Database = {
           episodes_done?: number
           error?: string | null
           id?: string
+          input_context?: Json
           owner_id?: string
           progress?: number
           series_id?: string | null
@@ -923,7 +926,7 @@ export type Database = {
           created_at: string
           id: string
           kind: string
-          source_key: string
+          source_key: string | null
           user_id: string
         }
         Insert: {
@@ -931,7 +934,7 @@ export type Database = {
           created_at?: string
           id?: string
           kind: string
-          source_key: string
+          source_key?: string | null
           user_id: string
         }
         Update: {
@@ -939,7 +942,7 @@ export type Database = {
           created_at?: string
           id?: string
           kind?: string
-          source_key?: string
+          source_key?: string | null
           user_id?: string
         }
         Relationships: []
@@ -957,6 +960,10 @@ export type Database = {
           streak_incremented: boolean
           total_xp: number
         }[]
+      }
+      ensure_profile: {
+        Args: Record<PropertyKey, never>
+        Returns: Database["public"]["Tables"]["profiles"]["Row"]
       }
       has_role: {
         Args: {

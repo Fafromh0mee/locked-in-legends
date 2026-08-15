@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -22,10 +23,23 @@ type AskInput = {
 };
 
 const DECK_HINT = /(flash\s?cards?|flashcard deck|deck of cards|study cards|revision cards)/i;
+const askSchema = z.object({
+  question: z.string().trim().min(1).max(4_000),
+  context: z.string().trim().max(12_000).optional(),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().trim().max(4_000),
+      }),
+    )
+    .max(20)
+    .optional(),
+});
 
 export const askSusu = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: AskInput) => input)
+  .inputValidator((input: unknown) => askSchema.parse(input) as AskInput)
   .handler(async ({ data }) => {
     const { chat } = await import("./ai.server");
     const { parseJson } = await import("./ai.server");

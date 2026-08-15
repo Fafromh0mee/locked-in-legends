@@ -50,7 +50,8 @@ export const Route = createFileRoute("/_authenticated/create")({
 });
 
 type CastRow = { key: string; name: string; role: string; files: File[]; savedId?: string };
-type SavedChar = { id: string; name: string; role: string; image: string | null };
+type SavedChar = { id: string; name: string; role: string; image: string | null; imageUrls: string[] };
+type CastPayload = { id?: string; name: string; role?: string; imageUrls?: string[] };
 
 
 const STAGES = [
@@ -117,6 +118,7 @@ function CreatePage() {
           name: c.name,
           role: c.role_description ?? "",
           image: (c.image_urls as string[] | null)?.[0] ?? null,
+          imageUrls: (c.image_urls as string[] | null) ?? [],
         })),
       );
       setLoadingCast(false);
@@ -153,16 +155,31 @@ function CreatePage() {
     }
   }
 
+  async function runBuilds(jobId: string, startIndex: number, episodeTitles: string[], fallbackTopic?: string, fallbackCast?: CastPayload[]) {
+    for (let i = startIndex; i < episodeTitles.length; i += 1) {
+      const res = await build({
+        data: {
+          jobId,
+          index: i,
+          ...(fallbackTopic ? { topic: fallbackTopic } : {}),
+          ...(fallbackCast ? { cast: fallbackCast } : {}),
+        },
+      });
+      setDoneCount(res.done);
+      setProgress(Math.round(18 + (res.done / res.total) * 82));
+    }
+  }
+
   async function generate() {
     if (!user) return;
     setRunning(true);
     setProgress(6);
     try {
       const named = cast.filter((c) => c.name.trim());
-      const savedCast: { id?: string; name: string; role?: string }[] = pickedIds
+      const savedCast: CastPayload[] = pickedIds
         .map((id) => savedChars.find((c) => c.id === id))
         .filter((c): c is SavedChar => Boolean(c))
-        .map((c) => ({ id: c.id, name: c.name, role: c.role }));
+        .map((c) => ({ id: c.id, name: c.name, role: c.role, imageUrls: c.imageUrls }));
 
       for (const row of named) {
         const uploaded = await uploadCastPhotos(user.id, row.files);
@@ -177,7 +194,12 @@ function CreatePage() {
           })
           .select("id")
           .single();
-        savedCast.push({ ...(data?.id ? { id: data.id } : {}), name: row.name.trim(), role: row.role.trim() });
+        savedCast.push({
+          ...(data?.id ? { id: data.id } : {}),
+          name: row.name.trim(),
+          role: row.role.trim(),
+          imageUrls: uploaded.urls,
+        });
       }
 
       const fileNotes: string[] = [];
@@ -216,11 +238,7 @@ function CreatePage() {
       setStage("Painting the cover art");
       void makeCover({ data: { seriesId: plan.seriesId, title: plan.title, topic: topic.trim() } }).catch(() => {});
 
-      for (let i = 0; i < plan.episodeTitles.length; i += 1) {
-        const res = await build({ data: { jobId: plan.jobId, index: i, topic: topic.trim(), cast: savedCast } });
-        setDoneCount(res.done);
-        setProgress(Math.round(18 + (res.done / res.total) * 82));
-      }
+      await runBuilds(plan.jobId, 0, plan.episodeTitles, topic.trim(), savedCast);
 
       setStage("Final cut delivered");
       setProgress(100);

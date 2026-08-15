@@ -1,8 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 type ModerateInput = { dataUrl: string };
+
+const moderateSchema = z.object({
+  dataUrl: z.string().startsWith("data:image/").max(35_000_000),
+});
 
 const RULES = [
   "You are an image safety reviewer for a school learning app used by students.",
@@ -16,10 +21,8 @@ const RULES = [
 /** Screens an uploaded avatar for inappropriate content before it is saved. */
 export const moderateImage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: ModerateInput) => input)
+  .inputValidator((input: unknown) => moderateSchema.parse(input) as ModerateInput)
   .handler(async ({ data }) => {
-    if (!data.dataUrl.startsWith("data:image/")) throw new Error("That file is not an image.");
-
     const { chat, parseJson } = await import("./ai.server");
     try {
       const raw = await chat(
@@ -40,8 +43,7 @@ export const moderateImage = createServerFn({ method: "POST" })
         safe: parsed.safe !== false,
         reason: parsed.reason ?? "This image isn't allowed as a profile picture.",
       };
-    } catch {
-      // Never block a student because the reviewer itself failed.
-      return { safe: true, reason: "" };
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : "Image review failed.");
     }
   });

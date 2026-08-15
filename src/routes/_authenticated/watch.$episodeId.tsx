@@ -156,7 +156,7 @@ function WatchPage() {
     setFinished(true);
     pop("correct");
     const perfect = wrong === 0 && questions.length > 0;
-    await saveProgress({ last_slide_index: total - 1, completed: true, perfect_quiz: perfect });
+    await saveProgress({ last_slide_index: Math.max(0, total - 1), completed: true, perfect_quiz: perfect });
     let gained = 0;
     const complete = await awardXp("episode_complete", XP.episodeComplete, `episode:${episodeId}`);
     gained += complete.awarded;
@@ -194,17 +194,19 @@ function WatchPage() {
       const res = await awardXp("quiz_correct", XP.correctAnswer, `q:${question.id}`);
       setEarned((prev) => prev + res.awarded);
       setStreak(res.current_streak);
-      const { data: prof } = await supabase.from("profiles").select("correct_answers").eq("id", user!.id).maybeSingle();
-      await supabase
-        .from("profiles")
-        .update({ correct_answers: (prof?.correct_answers ?? 0) + 1 })
-        .eq("id", user!.id);
-      await refreshProfile();
+      if (res.awarded > 0) {
+        const { data: prof } = await supabase.from("profiles").select("correct_answers").eq("id", user!.id).maybeSingle();
+        await supabase
+          .from("profiles")
+          .update({ correct_answers: (prof?.correct_answers ?? 0) + 1 })
+          .eq("id", user!.id);
+        await refreshProfile();
+      }
     } else {
       setWrong((prev) => prev + 1);
     }
     if (user) {
-      await supabase.from("quiz_attempts").insert({
+      const { error } = await supabase.from("quiz_attempts").insert({
         user_id: user.id,
         episode_id: episodeId,
         question_id: question.id,
@@ -214,6 +216,7 @@ function WatchPage() {
         time_taken_ms: ms,
         timed_out: selected === null && !answer.text,
       });
+      if (error && error.code !== "23505") console.warn(error.message);
     }
   }
 

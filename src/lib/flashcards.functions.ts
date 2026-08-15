@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -7,13 +8,31 @@ export type GeneratedCard = { front: string; back: string };
 type GenerateInput = { seriesId?: string; prompt?: string; count?: number };
 type SaveInput = { title: string; topic?: string | null; source?: string; cards: GeneratedCard[] };
 
+const generatedCardSchema = z.object({
+  front: z.string().trim().min(1).max(500),
+  back: z.string().trim().min(1).max(1_000),
+});
+
+const generateSchema = z.object({
+  seriesId: z.string().uuid().optional(),
+  prompt: z.string().trim().max(4_000).optional(),
+  count: z.number().int().min(4).max(24).optional(),
+});
+
+const saveSchema = z.object({
+  title: z.string().trim().min(1).max(80),
+  topic: z.string().trim().max(200).nullable().optional(),
+  source: z.string().trim().max(40).optional(),
+  cards: z.array(generatedCardSchema).min(1).max(40),
+});
+
 const DECK_SYSTEM =
   'You write study flashcards. Reply with JSON only: {"title":string,"cards":[{"front":string,"back":string}]}. ' +
   "Fronts are short prompts or questions; backs are concise answers (max 2 sentences). No markdown, no numbering.";
 
 export const generateDeck = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: GenerateInput) => input)
+  .inputValidator((input: unknown) => generateSchema.parse(input) as GenerateInput)
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const count = Math.min(Math.max(data.count ?? 12, 4), 24);
@@ -98,7 +117,7 @@ export const generateDeck = createServerFn({ method: "POST" })
 
 export const saveDeck = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: SaveInput) => input)
+  .inputValidator((input: unknown) => saveSchema.parse(input) as SaveInput)
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const cards = (data.cards ?? []).filter((c) => c?.front && c?.back).slice(0, 40);

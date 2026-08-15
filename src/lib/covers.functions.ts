@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -10,11 +11,17 @@ type CoverInput = {
 };
 
 const YEAR_SECONDS = 60 * 60 * 24 * 365;
+const coverSchema = z.object({
+  seriesId: z.string().uuid(),
+  title: z.string().trim().min(1).max(160),
+  subject: z.string().trim().max(120).optional(),
+  topic: z.string().trim().max(200).optional(),
+});
 
 /** Generates a cinematic cover image for a series and stores it on the series row. */
 export const generateSeriesCover = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: CoverInput) => input)
+  .inputValidator((input: unknown) => coverSchema.parse(input) as CoverInput)
   .handler(async ({ data, context }) => {
     const key = process.env["LOVABLE_API_KEY"];
     if (!key) return { coverUrl: null as string | null };

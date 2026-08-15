@@ -19,7 +19,7 @@ export const signInWithIdentifier = createServerFn({ method: "POST" })
     const url = process.env["SUPABASE_URL"]!;
     const publishableKey = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
 
-    let email = data.identifier.trim();
+    let email = data.identifier.trim().toLowerCase();
 
     if (!email.includes("@")) {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -73,10 +73,11 @@ export const isUsernameAvailable = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => z.object({ username: z.string().min(3).max(24) }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const username = data.username.trim().toLowerCase();
     const { data: existing } = await supabaseAdmin
       .from("profiles")
       .select("id")
-      .ilike("username", data.username)
+      .ilike("username", username)
       .maybeSingle();
     return { available: !existing };
   });
