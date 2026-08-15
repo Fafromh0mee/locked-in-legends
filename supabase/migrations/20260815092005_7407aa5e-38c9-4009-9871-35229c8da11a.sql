@@ -1,0 +1,1 @@
+UPDATE public.profiles SET hidden_from_rankings = true WHERE username LIKE 'qa%' OR username LIKE 'test%';
