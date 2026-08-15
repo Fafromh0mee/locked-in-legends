@@ -22,6 +22,10 @@ export const signInWithIdentifier = createServerFn({ method: "POST" })
     let email = data.identifier.trim().toLowerCase();
 
     if (!email.includes("@")) {
+      if (!process.env["SUPABASE_SERVICE_ROLE_KEY"]) {
+        return { ok: false as const, error: "Username login is not configured locally. Use your email instead." };
+      }
+
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const { data: profile } = await supabaseAdmin
         .from("profiles")
@@ -72,6 +76,10 @@ export const signInWithIdentifier = createServerFn({ method: "POST" })
 export const isUsernameAvailable = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => z.object({ username: z.string().min(3).max(24) }).parse(data))
   .handler(async ({ data }) => {
+    if (!process.env["SUPABASE_URL"] || !process.env["SUPABASE_SERVICE_ROLE_KEY"]) {
+      return { available: true, checked: false };
+    }
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const username = data.username.trim().toLowerCase();
     const { data: existing } = await supabaseAdmin
@@ -79,5 +87,5 @@ export const isUsernameAvailable = createServerFn({ method: "POST" })
       .select("id")
       .ilike("username", username)
       .maybeSingle();
-    return { available: !existing };
+    return { available: !existing, checked: true };
   });

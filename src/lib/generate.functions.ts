@@ -22,6 +22,7 @@ type StartInput = {
   youtubeUrl?: string;
   cast: CastInput[];
   episodeCount?: number;
+  voiceGender?: "neutral" | "feminine" | "masculine";
 };
 
 type BuildInput = {
@@ -38,6 +39,7 @@ type StoredGenerationContext = {
   youtubeTitle?: string | null;
   youtubeTranscript?: string | null;
   cast: CastInput[];
+  voiceGender?: "neutral" | "feminine" | "masculine";
 };
 
 type Outline = {
@@ -48,7 +50,7 @@ type Outline = {
 };
 
 type EpisodeContent = {
-  slides: { title: string; bullets: string[]; takeaway: string }[];
+  slides: { title: string; bullets: string[]; takeaway: string; narration?: string }[];
   questions: {
     kind: "mcq" | "written";
     prompt: string;
@@ -73,6 +75,7 @@ const startSchema = z.object({
   youtubeUrl: z.string().trim().max(500).optional(),
   cast: z.array(castSchema).max(8).default([]),
   episodeCount: z.number().int().min(3).max(8).optional(),
+  voiceGender: z.enum(["neutral", "feminine", "masculine"]).default("neutral"),
 });
 
 const buildSchema = z.object({
@@ -183,6 +186,24 @@ async function markGenerationFailed(
   if (episodeId) await supabase.from("episodes").update({ status: "failed" }).eq("id", episodeId);
 }
 
+async function prepareNarration(
+  slide: { title: string; bullets: string[]; takeaway: string | null; narration?: string },
+  genderValue: unknown,
+) {
+  const { estimateSpeechDurationSeconds, getVoiceProfile, narrationFallback, normalizeVoiceGender } =
+    await import("./narration.server");
+  const voiceGender = normalizeVoiceGender(genderValue);
+  const profile = getVoiceProfile(voiceGender);
+  const narrationText = (slide.narration?.trim() || narrationFallback(slide)).slice(0, 4096);
+  const durationSeconds = estimateSpeechDurationSeconds(narrationText);
+
+  return {
+    narrationText,
+    durationSeconds,
+    narratorVoice: profile.voiceLabel,
+  };
+}
+
 /** Plans the series: writes the series row, the job row and one episode shell per planned episode. */
 export const startGeneration = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -287,6 +308,7 @@ export const startGeneration = createServerFn({ method: "POST" })
       youtubeTitle: youtube?.title ?? null,
       youtubeTranscript: youtube?.transcript ?? null,
       cast,
+      voiceGender: data.voiceGender,
     };
 
     const { data: job, error: jobError } = await supabase
@@ -390,9 +412,10 @@ export const buildEpisode = createServerFn({ method: "POST" })
               role: "system",
               content:
                 "You write cinematic teaching episodes. Reply with JSON only: " +
-                '{"slides":[{"title":string,"bullets":[string,string,string],"takeaway":string}],' +
+                '{"slides":[{"title":string,"bullets":[string,string,string],"takeaway":string,"narration":string}],' +
                 '"questions":[{"kind":"mcq"|"written","prompt":string,"options":[string],"correct_index":number,"answer_text":string,"explanation":string,"seconds":number}]}. ' +
-                "Give 5 slides with 3 substantive bullets each. Give exactly 3 questions: two mcq with 4 options and correct_index, " +
+                "Give 5 slides with 3 substantive bullets each. Also write a natural 25-55 word narration script for each slide. " +
+                "Give exactly 3 questions: two mcq with 4 options and correct_index, " +
                 "one written whose answer_text is a short 1-4 word answer. Every question needs a one-sentence explanation of the correct answer. " +
                 "seconds is 20 for mcq and 30 for written. Reference the cast by name inside the slide narration where it helps. " +
                 "Questions must be about the lesson content only: never mention, quote, or attribute answers to any cast member. " +
@@ -420,16 +443,56 @@ export const buildEpisode = createServerFn({ method: "POST" })
 
       const slides = (content.slides ?? []).slice(0, 8);
       if (slides.length) {
+        await supabase
+          .from("generation_jobs")
+          .update({
+            stage: `Writing narration for episode ${data.index + 1}`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id)
+          .eq("owner_id", userId);
+
+        const voiceRows = [];
+        const voiceGender = stored.voiceGender ?? "neutral";
+        let narratorVoice: string | null = null;
+        let durationSeconds = 0;
+        for (let i = 0; i < slides.length; i += 1) {
+          const s = slides[i]!;
+          const narration = await prepareNarration(
+            {
+              title: s.title,
+              bullets: (s.bullets ?? []).filter((b) => typeof b === "string"),
+              takeaway: s.takeaway ?? null,
+              narration: s.narration,
+            },
+            voiceGender,
+          );
+          narratorVoice = narratorVoice ?? narration.narratorVoice;
+          durationSeconds += narration.durationSeconds;
+          voiceRows.push({ slide: s, narration });
+        }
+
         const { error } = await supabase.from("episode_slides").insert(
-          slides.map((s, i) => ({
+          voiceRows.map(({ slide: s, narration }, i) => ({
             episode_id: episode.id,
             order_index: i,
             title: s.title,
             bullets: (s.bullets ?? []).filter((b) => typeof b === "string"),
             takeaway: s.takeaway ?? null,
+            narration_text: narration.narrationText,
+            narration_duration_seconds: narration.durationSeconds,
           })),
         );
         if (error) throw error;
+
+        await supabase
+          .from("episodes")
+          .update({
+            duration_seconds: durationSeconds,
+            voice_gender: voiceGender,
+            narrator_voice: narratorVoice,
+          })
+          .eq("id", episode.id);
       }
 
       const questions = (content.questions ?? []).slice(0, 5);

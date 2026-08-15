@@ -204,6 +204,8 @@ export type Database = {
           created_at: string
           episode_id: string
           id: string
+          narration_text: string | null
+          narration_duration_seconds: number | null
           order_index: number
           takeaway: string | null
           title: string
@@ -213,6 +215,8 @@ export type Database = {
           created_at?: string
           episode_id: string
           id?: string
+          narration_text?: string | null
+          narration_duration_seconds?: number | null
           order_index?: number
           takeaway?: string | null
           title: string
@@ -222,6 +226,8 @@ export type Database = {
           created_at?: string
           episode_id?: string
           id?: string
+          narration_text?: string | null
+          narration_duration_seconds?: number | null
           order_index?: number
           takeaway?: string | null
           title?: string
@@ -241,6 +247,7 @@ export type Database = {
           created_at: string
           duration_seconds: number
           id: string
+          narrator_voice: string | null
           order_index: number
           owner_id: string
           series_id: string
@@ -248,6 +255,7 @@ export type Database = {
           synopsis: string | null
           title: string
           updated_at: string
+          voice_gender: string
           video_job_id: string | null
           video_url: string | null
         }
@@ -255,6 +263,7 @@ export type Database = {
           created_at?: string
           duration_seconds?: number
           id?: string
+          narrator_voice?: string | null
           order_index?: number
           owner_id: string
           series_id: string
@@ -262,6 +271,7 @@ export type Database = {
           synopsis?: string | null
           title: string
           updated_at?: string
+          voice_gender?: string
           video_job_id?: string | null
           video_url?: string | null
         }
@@ -269,6 +279,7 @@ export type Database = {
           created_at?: string
           duration_seconds?: number
           id?: string
+          narrator_voice?: string | null
           order_index?: number
           owner_id?: string
           series_id?: string
@@ -276,6 +287,7 @@ export type Database = {
           synopsis?: string | null
           title?: string
           updated_at?: string
+          voice_gender?: string
           video_job_id?: string | null
           video_url?: string | null
         }

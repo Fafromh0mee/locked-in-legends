@@ -57,10 +57,14 @@ function SignupPage() {
 
     setBusy(true);
     try {
-      const { available } = await checkUsername({ data: { username: cleanUsername } });
-      if (!available) {
-        toast.error("That username is taken. Try another one.");
-        return;
+      try {
+        const { available, checked } = await checkUsername({ data: { username: cleanUsername } });
+        if (checked && !available) {
+          toast.error("That username is taken. Try another one.");
+          return;
+        }
+      } catch (error) {
+        console.warn("[Signup] Username availability check skipped:", error);
       }
 
       const { data, error } = await supabase.auth.signUp({

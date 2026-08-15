@@ -10,6 +10,7 @@ import {
   Film,
   ImagePlus,
   Loader2,
+  Mic2,
   Paperclip,
   Sparkles,
   Trash2,
@@ -52,6 +53,7 @@ export const Route = createFileRoute("/_authenticated/create")({
 type CastRow = { key: string; name: string; role: string; files: File[]; savedId?: string };
 type SavedChar = { id: string; name: string; role: string; image: string | null; imageUrls: string[] };
 type CastPayload = { id?: string; name: string; role?: string; imageUrls?: string[] };
+type VoiceGender = "neutral" | "feminine" | "masculine";
 
 
 const STAGES = [
@@ -74,6 +76,11 @@ const FACTS = [
 ];
 
 const STEPS = ["Topic", "Materials", "Cast", "Generate"];
+const VOICE_OPTIONS: Array<{ value: VoiceGender; label: string }> = [
+  { value: "neutral", label: "Neutral" },
+  { value: "feminine", label: "Feminine" },
+  { value: "masculine", label: "Masculine" },
+];
 
 function CreatePage() {
   const { user } = useAuth();
@@ -89,6 +96,7 @@ function CreatePage() {
   const [youtube, setYoutube] = useState("");
   const [materials, setMaterials] = useState<File[]>([]);
   const [cast, setCast] = useState<CastRow[]>([{ key: crypto.randomUUID(), name: "", role: "", files: [] }]);
+  const [voiceGender, setVoiceGender] = useState<VoiceGender>("neutral");
   const [savedChars, setSavedChars] = useState<SavedChar[]>([]);
   const [pickedIds, setPickedIds] = useState<string[]>([]);
   const [loadingCast, setLoadingCast] = useState(true);
@@ -226,6 +234,7 @@ function CreatePage() {
           topic: topic.trim(),
           episodeCount,
           cast: savedCast,
+          voiceGender,
           ...(combinedNotes ? { notes: combinedNotes } : {}),
           ...(youtube.trim() ? { youtubeUrl: youtube.trim() } : {}),
         },
@@ -573,6 +582,28 @@ function CreatePage() {
                           ...cast.filter((c) => c.name.trim()).map((c) => c.name.trim()),
                         ].join(", ") || "narrator only"}
 
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="flex items-center gap-1.5 text-muted-foreground">
+                        <Mic2 className="size-3.5" /> Voice
+                      </dt>
+                      <dd className="flex flex-wrap justify-end gap-1.5">
+                        {VOICE_OPTIONS.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setVoiceGender(option.value)}
+                            className={cn(
+                              "press rounded-xl border px-2.5 py-1 text-xs font-semibold transition-colors",
+                              option.value === voiceGender
+                                ? "border-primary bg-primary/15 text-primary"
+                                : "border-border/60 text-muted-foreground",
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
                       </dd>
                     </div>
                   </dl>

@@ -48,7 +48,23 @@ export const Route = createFileRoute("/_authenticated/watch/$episodeId")({
   component: WatchPage,
 });
 
-type Slide = { id: string; order_index: number; title: string; bullets: unknown; takeaway: string | null };
+type Slide = {
+  id: string;
+  order_index: number;
+  title: string;
+  bullets: unknown;
+  takeaway: string | null;
+  narration_text: string | null;
+  narration_duration_seconds: number | null;
+};
+type Episode = {
+  id: string;
+  title: string;
+  synopsis: string | null;
+  series_id: string;
+  order_index: number;
+  voice_gender: string | null;
+};
 type Question = {
   id: string;
   order_index: number;
@@ -96,10 +112,14 @@ function WatchPage() {
     queryKey: ["episode", episodeId],
     queryFn: async () => {
       const [{ data: episode }, { data: slides }, { data: questions }] = await Promise.all([
-        supabase.from("episodes").select("id, title, synopsis, series_id, order_index").eq("id", episodeId).maybeSingle(),
+        supabase
+          .from("episodes")
+          .select("id, title, synopsis, series_id, order_index, voice_gender")
+          .eq("id", episodeId)
+          .maybeSingle(),
         supabase
           .from("episode_slides")
-          .select("id, order_index, title, bullets, takeaway")
+          .select("id, order_index, title, bullets, takeaway, narration_text, narration_duration_seconds")
           .eq("episode_id", episodeId)
           .order("order_index", { ascending: true }),
         supabase
@@ -108,7 +128,7 @@ function WatchPage() {
           .eq("episode_id", episodeId)
           .order("order_index", { ascending: true }),
       ]);
-      return { episode, slides: (slides ?? []) as Slide[], questions: (questions ?? []) as Question[] };
+      return { episode: episode as Episode | null, slides: (slides ?? []) as Slide[], questions: (questions ?? []) as Question[] };
     },
   });
 
@@ -289,6 +309,7 @@ function WatchPage() {
           )}
         </AnimatePresence>
       }
+      voiceGender={data?.episode?.voice_gender ?? "neutral"}
     />
   );
 }
@@ -296,14 +317,29 @@ function WatchPage() {
 /** Runtime for a slide, so playback feels paced like a cut rather than a fixed slideshow. */
 function slideDuration(slide: Slide | undefined) {
   if (!slide) return 6000;
+  if (slide.narration_duration_seconds) return slide.narration_duration_seconds * 1000;
   const bullets = asStrings(slide.bullets);
-  const words = (slide.title + " " + bullets.join(" ") + " " + (slide.takeaway ?? "")).trim().split(/\s+/).length;
+  const narration = slide.narration_text ?? "";
+  const words = (narration || slide.title + " " + bullets.join(" ") + " " + (slide.takeaway ?? "")).trim().split(/\s+/).length;
   return Math.min(26000, Math.max(6500, 2600 + words * 380));
 }
 
 function formatTime(ms: number) {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function pickBrowserVoice(gender: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length === 0) return null;
+  const preferred =
+    gender === "feminine"
+      ? ["female", "woman", "samantha", "zira", "susan"]
+      : gender === "masculine"
+        ? ["male", "man", "david", "mark", "alex"]
+        : ["natural", "alloy", "google", "microsoft"];
+  return voices.find((voice) => preferred.some((term) => voice.name.toLowerCase().includes(term))) ?? voices[0] ?? null;
 }
 
 function PlayerStage({
@@ -314,6 +350,7 @@ function PlayerStage({
   onSeek,
   onEnded,
   quiz,
+  voiceGender,
 }: {
   title: string;
   slides: Slide[];
@@ -322,8 +359,10 @@ function PlayerStage({
   onSeek: (index: number) => void;
   onEnded: () => void;
   quiz: React.ReactNode;
+  voiceGender: string;
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const [playing, setPlaying] = useState(true);
   const [elapsed, setElapsed] = useState(0);
   const [rate, setRate] = useState(1);
@@ -344,7 +383,8 @@ function PlayerStage({
 
   // Reset the playhead whenever the cut changes (unless we scrubbed into it).
   useEffect(() => {
-    setElapsed(pendingElapsed.current ?? 0);
+    const nextElapsed = pendingElapsed.current ?? 0;
+    setElapsed(nextElapsed);
     pendingElapsed.current = null;
   }, [index]);
 
@@ -357,8 +397,9 @@ function PlayerStage({
         const d = durations[i]!;
         if (clamped < acc + d || i === durations.length - 1) {
           const within = clamped - acc;
-          if (i === index) setElapsed(within);
-          else {
+          if (i === index) {
+            setElapsed(within);
+          } else {
             pendingElapsed.current = within;
             onSeek(i);
           }
@@ -402,6 +443,32 @@ function PlayerStage({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [active, duration, onEnded, rate]);
+
+  useEffect(() => {
+    if (!slide?.narration_text || typeof window === "undefined" || !("speechSynthesis" in window)) {
+      return;
+    }
+
+    const synth = window.speechSynthesis;
+    if (!active) {
+      synth.pause();
+      return;
+    }
+
+    synth.cancel();
+    const utterance = new SpeechSynthesisUtterance(slide.narration_text);
+    utterance.rate = Math.min(2, Math.max(0.75, rate));
+    utterance.voice = pickBrowserVoice(voiceGender);
+    utteranceRef.current = utterance;
+    synth.speak(utterance);
+
+    return () => {
+      if (utteranceRef.current === utterance) {
+        synth.cancel();
+        utteranceRef.current = null;
+      }
+    };
+  }, [active, index, rate, slide?.narration_text, voiceGender]);
 
   // Reveal bullets in time with the voice-over pacing.
   const revealed = useMemo(() => {
